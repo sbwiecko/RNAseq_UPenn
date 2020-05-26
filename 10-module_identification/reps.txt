@@ -1,0 +1,5 @@
+DiffGenes.txt	control	FCtl_LE_1	FCtl_LE_2	FCtl_LE_3
+DiffGenes.txt	pzq_1hr	F1h_LE_1	F1h_LE_2	F1h_LE_3
+DiffGenes.txt	pzq_3hr	F3h_LE_1	F3h_LE_2	F3h_LE_3
+DiffGenes.txt	pzq_12hr	F12h_LE_1	F12h_LE_2	F12h_LE_3
+DiffGenes.txt	pzq_24hr	F24h_LE_1	F24h_LE_1	F24h_LE_1

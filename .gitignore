@@ -1,0 +1,36 @@
+# ignore presentations and videos
+*.pptx
+*.mp4
+
+# ignore data files and collections
+*.h5
+*.tsv
+*.gz
+*.json
+*.gmt
+*.fa
+*.index
+*.fastq
+**/schistosoma/ # ignore directory in any depth
+
+# ignore the results from MultiQC analysis
+**/MultiQC/
+**/multiqc_data/
+**/test/
+
+# ignore the results from ClusterObject
+**/Results_21_May_20
+
+# ignore residuals from analysis
+*.js
+**/js/
+*.css
+**/css/
+*.map
+*.Rproj
+*.RData
+*.Rhistory
+*.log
+
+# ignore plotly examples
+**/example_plotly/
