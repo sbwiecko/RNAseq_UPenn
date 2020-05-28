@@ -1,0 +1,15 @@
+sample	group	rep
+totalRNA_0hr_rep1	0hrs	1
+totalRNA_0hr_rep2	0hrs	2
+totalRNA_8hr_rep1	8hrs	1
+totalRNA_8hr_rep2	8hrs	2
+totalRNA_16hr_rep1	16hrs	1
+totalRNA_16hr_rep2	16hrs	2
+totalRNA_24hr_rep1	24hrs	1
+totalRNA_24hr_rep2	24hrs	2
+totalRNA_32hr_rep1	32hrs	1
+totalRNA_32hr_rep2	32hrs	2
+totalRNA_40hr_rep1	40hrs	1
+totalRNA_40hr_rep2	40hrs	2
+totalRNA_48hr_rep1	48hrs	1
+totalRNA_48hr_rep2	48hrs	2
