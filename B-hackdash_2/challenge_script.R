@@ -11,6 +11,7 @@ library(cowplot)
 library(gplots)
 
 targets <- read_tsv("./malaria/studyDesign.txt")
+# note that read_tsv is flexible and might have read "studyDesign.txt" as well
 path <- file.path("./malaria", targets$sample, "abundance.tsv")
 all(file.exists(path)) # worked great
 
@@ -171,18 +172,27 @@ ggsave(filename = "PCA.pdf", dpi = 150)
 # There is only one variable in this study
 group <- targets$group
 group <- factor(group,
+                # firs char numerical ordered
                 levels = c("0hrs", "8hrs", "16hrs",
-                           "24hrs", "32hrs", "40hrs", "48hrs"),
-                labels = c('A', 'B', 'C', 'D', 'E', 'F', 'G'))
+                           "24hrs", "32hrs", "40hrs", "48hrs"))
+                # labels = c('A', 'B', 'C', 'D', 'E', 'F', 'G')) # no needed, see below
 # let's do some stat using time as a variable
 design <- model.matrix(~0 + group)
-colnames(design) <- levels(group)
+#colnames(design) <- levels(group)
+# don't change name because it now starts with a letter instead of numeric
+# this would cause issue with the contrast.matrix
 
 v.DEGList.filtered.norm <- voom(dgelist_filt_norm, design, plot = TRUE)
 # the graph show that we could take a threshold a little bit higher
 fit <- lmFit(v.DEGList.filtered.norm, design)
-# I excluded the 48hrs - 0hrs test because these are similar
-contrast.matrix <- makeContrasts(B - A, C - A, D - A, E - A, F - A,
+# I excluded the 48hrs - 0hrs test because these are similar and
+# Venn diagram not possible with more than 5 sets
+contrast.matrix <- makeContrasts(eight = group8hrs - group0hrs,
+                                 sixteen = group16hrs - group0hrs,
+                                 twentyfour = group24hrs - group0hrs,
+                                 thirtytwo = group32hrs - group0hrs,
+                                 forty = group40hrs - group0hrs,
+                                 #fortyeight = group48hrs - group0hrs,
                                  levels = design)
 
 fits <- contrasts.fit(fit, contrast.matrix)
@@ -190,8 +200,10 @@ ebFit <- eBayes(fits)
 
 # Volcano Plots ----
 # in topTable function above, set 'number=40000' to capture all genes
-Hits <- topTable(ebFit, adjust = "BH", coef = 1, number = 40000, sort.by = "logFC") %>%
+# with coef = 1 we look at the 1st pariwise comparison i.e. group8hrs - group0hrs
+Hits <- topTable(ebFit, adjust = "BH", coef = 1, number = 10000, sort.by = "logFC") %>%
   as_tibble(rownames = "geneID")
+# we could loop over the different pairwise comparisons
 
 # we choose less restrictive threshold because of stat power (duplicate)
 ggplot(Hits) +
@@ -212,19 +224,78 @@ vennDiagram(results,
             lwd = 2,
             circle.col = c("blue","green","red","yellow","black"))
 
-# Let's build a heatmap
+
+# Let's build a heatmap with all comparisons
+contrast.matrix <- makeContrasts(eight = group8hrs - group0hrs,
+                                 sixteen = group16hrs - group0hrs,
+                                 twentyfour = group24hrs - group0hrs,
+                                 thirtytwo = group32hrs - group0hrs,
+                                 forty = group40hrs - group0hrs,
+                                 fortyeight = group48hrs - group0hrs,
+                                 levels = design)
+# we should repeat the fit because the contrast matrix has changed
+fits <- contrasts.fit(fit, contrast.matrix)
+ebFit <- eBayes(fits)
+results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05, lfc=2.5)
+
 colnames(v.DEGList.filtered.norm$E) <- sample_labels
-diffGenes <- v.DEGList.filtered.norm$E[results[, 1] != 0, ]
+# differentially expressed genes at any time point pooled
+diffGenes <- v.DEGList.filtered.norm$E[results[, 1] != 0 | results[, 2] != 0 | results[, 3] != 0 | results[, 4] !=0 | results[, 5] != 0 | results[, 6] != 0, ]
+dim(diffGenes)
+
+# heatmap
+# possibility to create modules
 clustRows <- hclust(as.dist(1 - cor(t(diffGenes),
                             method = "pearson")
-                   ), method = "complete") 
+                   ), method = "complete")
 clustColumns <- hclust(as.dist(1 - cor(diffGenes,
                                        method="spearman")
                               ), method = "complete") #cluster columns by spearman correlation
-heatmap.2(diffGenes, 
+heatmap.2(diffGenes,
           Rowv = as.dendrogram(clustRows),
           Colv = as.dendrogram(clustColumns),
-          scale = 'row', labRow = NA,
+          scale = "row", labRow = NA,
           density.info = "none", trace = "none",
           cexRow = 1, cexCol = 1, margins = c(8,20))
+# however the trees don't help and move the labels of the time points
 
+heatmap.2(diffGenes,
+          Rowv = as.dendrogram(clustRows),
+          Colv = NA,
+          scale = "row", labRow = NA,
+          density.info = "none", trace = "none",
+          cexRow = 1, cexCol = 1, margins = c(8, 2))
+
+
+# another design is fixing the intercept to ~group and so
+# cmparing each time point to 0hrs
+# no contrast matrix required (inherent)
+design <- model.matrix(~group)
+v.DEGList.filtered.norm <- voom(dgelist_filt_norm, design, plot = TRUE)
+colnames(v.DEGList.filtered.norm$E) <- sample_labels
+fit <- lmFit(v.DEGList.filtered.norm, design)
+ebFit <- eBayes(fit)
+results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05, lfc=2.5)
+# we need to delete the reference to the 1st col of results (intercept) and add the 7th col
+diffGenes <- v.DEGList.filtered.norm$E[results[, 7] != 0 | results[, 2] != 0 | results[, 3] != 0 | results[, 4] !=0 | results[, 5] != 0 | results[, 6] != 0, ]
+dim(diffGenes)
+
+# heatmap
+clustRows <- hclust(as.dist(1 - cor(t(diffGenes),
+                            method = "pearson")
+                   ), method = "complete")
+clustColumns <- hclust(as.dist(1 - cor(diffGenes,
+                                       method="spearman")
+                              ), method = "complete") #cluster columns by spearman correlation
+heatmap.2(diffGenes,
+          Rowv = as.dendrogram(clustRows),
+          Colv = NA,
+          scale = "row", labRow = NA,
+          density.info = "none", trace = "none",
+          cexRow = 1, cexCol = 1, margins = c(8, 2))
+
+# finally use clust on the command line as an alternative method
+diffGenes.df <- as_tibble(diffGenes, rownames = "txID")
+write_tsv(diffGenes.df, "DiffGenes.txt") #NOTE: this .txt file can be directly used for input into other clustering or network analysis tools (e.g., String, Clust (https://github.com/BaselAbujamous/clust, etc.)
+# clust DiffGenes.txt -n 101 4 -r reps.txt
+# use the modules defined this way for further functional enrichment analysis

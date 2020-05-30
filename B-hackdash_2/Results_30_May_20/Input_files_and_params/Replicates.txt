@@ -1,0 +1,7 @@
+DiffGenes.txt	0hr	0hr_rep1	0hr_rep2
+DiffGenes.txt	8hr	8hr_rep1	8hr_rep2
+DiffGenes.txt	16hr	16hr_rep1	16hr_rep2
+DiffGenes.txt	24hr	24hr_rep1	24hr_rep2
+DiffGenes.txt	32hr	32hr_rep1	32hr_rep2
+DiffGenes.txt	40hr	40hr_rep1	40hr_rep2
+DiffGenes.txt	48hr	48hr_rep1	48hr_rep2
