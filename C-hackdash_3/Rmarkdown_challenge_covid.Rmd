@@ -67,12 +67,14 @@ library(tidyverse)
 targets <- read_tsv("covid_metadata.txt")
 
 # human covid data read/converted to a matrix with gene symbols as rownames
+# initially the dataframe contains X1 col with the name of genes
 human_covid_data <- read_tsv("GSE147507_RawReadCounts_Human.tsv")
 human_covid_data <- as.matrix(column_to_rownames(human_covid_data, "X1"))
 
 # repeat for the ferret covid data
 ferret_covid_data <- read_tsv("GSE147507_RawReadCounts_Ferret.tsv")
 ferret_covid_data <- as.matrix(column_to_rownames(ferret_covid_data, "X1"))
+# then the datatype is homogeneous in the matrices
 ```
 
 ### Aligning raw reads with Kallisto

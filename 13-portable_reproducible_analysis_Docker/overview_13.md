@@ -19,8 +19,9 @@ Reproducing an analysis requires more than just code. You need the original raw 
 * Sign-up for a an account on [Code Ocean](https://codeocean.com/) (be sure to use the same email address from your DataCamp login). You’ll get 15 compute hrs/month for free
 * Sign-up for a free [GitHub](https://github.com/) account (doesn’t matter which email you use)
 * Download [this gitignore file](https://github.com/DIYtranscriptomics/DIYtranscriptomics.github.io/tree/master/Code/files/gitignore.txt) - useful for updating your own .gitignore file in a project repo
+* [Download this script](http://diytranscriptomics.github.io/Code/files/buildPkg.R) that walks through how to turn any analysis project into an R package. You may also want this [text file](http://diytranscriptomics.github.io/Code/files/pkgDocs.txt) as a simple starting point for data documentation, and this [function file](http://diytranscriptomics.github.io/Code/files/DIYprofile.R) also as an example.
 
-## Code
+## Code Ocean
 
 We’ll use Code Ocean to interact with a dockerized container that packs all the code, data and software from the course into one reproducible and web-accessible environment. Simply login (or set-up a free account if you don’t already have one) and you’ll be able to re-run the entire course in a matter of minutes, without any software installation or data download. Your first run may take ~15min, since the full computing environment must be being built, but subsequent runs will be much faster. Note that this capsule includes raw fastq files, kallisto outputs, all of MSigDB for running GSEA, and the entire ARCHS4 database for interrogating ~700,000 publically available mouse and human RNAseq datasets. Have fun adapting this capsule for your own analyses!
 
@@ -32,3 +33,4 @@ We’ll use Code Ocean to interact with a dockerized container that packs all th
 * [On-boarding document](https://docker-curriculum.com/) for gettign started with Code Ocean
 * [Our recent paper](https://stm.sciencemag.org/content/11/519/eaax4204), showing a code capsule embedded directly in the joural webpage (a first for any AAAS journal)
 * [Google Collaboratory](https://colab.research.google.com/) - Write, edit and share Python code directly in your browser
+* There’s a lot of reading material for how to get started making functions and packages. Beyond the extensive and very well written [book on building R packages](http://r-pkgs.had.co.nz/) and excellent documentation for the [usethis package](https://usethis.r-lib.org/), you may also want to check out some great blog posts on making R packages ([here](https://masalmon.eu/2017/12/11/goodrpackages/), [here](https://r-mageddon.netlify.app/post/writing-an-r-package-from-scratch/), [here](https://tinyheero.github.io/jekyll/update/2015/07/26/making-your-first-R-package.html), and [here](https://kbroman.org/pkg_primer/))

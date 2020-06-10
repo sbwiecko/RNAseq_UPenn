@@ -3,6 +3,9 @@ title: "<center> The transcriptional response during human cutaneous leishmanias
 author: "<center> DIYtranscriptomics class (modified by Sébastien Wieckowski <center><br>"
 date: "<center> _`r Sys.Date()`_ <center>"
 output:
+  pdf_document:
+    fig_caption: yes
+    toc: yes
   html_document:
     code_folding: show
     df_print: paged
@@ -13,9 +16,6 @@ output:
       collapsed: false
       smooth_scroll: false
     number_sections: true
-  pdf_document:
-    fig_caption: yes
-    toc: yes
 ---
 
 ```{r setup, include=FALSE}

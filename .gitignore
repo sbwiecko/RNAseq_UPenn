@@ -34,3 +34,6 @@
 
 # ignore plotly examples
 **/example_plotly/
+.Rproj.user
+.Rhistory
+.RData

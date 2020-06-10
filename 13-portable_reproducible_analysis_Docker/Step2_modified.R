@@ -5,14 +5,14 @@ library(ensembldb)
 library(EnsDb.Hsapiens.v86)
 
 # read in your study design
-targets <- read_tsv("../3-read_mapping_Kallisto/test/studydesign.txt")
+targets <- read_tsv("C:/Users/WIECKOWS/Documents/RNAseq_UPenn/3-read_mapping_Kallisto/test/studydesign.txt")
 sampleLabels <- targets$sample
 
 # set file paths to your mapped data
 path <- file.path("../3-read_mapping_Kallisto/test", targets$sample, "abundance.tsv")
 Tx <- transcripts(EnsDb.Hsapiens.v86,
                   columns = c("tx_id", "gene_name"))
-Tx <- as_tibble(Tx)
+Tx <- tibble::as_tibble(Tx)
 Tx <- dplyr::rename(Tx, target_id = tx_id)
 Tx <- dplyr::select(Tx, "target_id", "gene_name")
 Txi_gene <- tximport(path,
