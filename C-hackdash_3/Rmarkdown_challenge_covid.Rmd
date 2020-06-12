@@ -3,19 +3,10 @@ title: "<center> The COVID challenge <center>"
 author: "<center> Sébastien Wieckowski <center><br>"
 date: "<center> _`r Sys.Date()`_ <center>"
 output:
-  html_document:
-    code_folding: show
-    df_print: paged
-    theme: yeti
-    highlight: tango
-    toc: yes
-    toc_float:
-      collapsed: false
-      smooth_scroll: false
-    number_sections: true
   pdf_document:
     fig_caption: yes
     toc: yes
+    latex_engine: xelatex
 ---
 
 ```{r setup, include=FALSE}
@@ -31,20 +22,20 @@ The proposed challenge is about the exploitation of raw data for an extensive RN
 
 ### Study design
 
-We first looked at the original study design file, in particular by selecting and sorting the sample, cell_line, treatment (which contains the MOI) and timepoint_postTreatment columns. The study design reports a variety of different samples and conditions, including:
+We first looked at the original study design file, in particular by selecting and sorting the sample, cell_line, treatment (which contains the MOI) and timepoint_postTreatment columns. The 'messy' study design reports a variety of different samples and conditions, including:
 
-* human primary NHBE samples treated mock vs. SARS-CoV-2 (from now SARS), IAV (i.e. influenza A virus), IAVdNS1 or IFN-β for 24 h
+* human primary NHBE samples treated mock vs. SARS-CoV-2 (from now SARS), IAV (i.e. influenza A virus), IAVdNS1 or IFN-β for different timepoints (12 - 24 h)
 * human A549 cell line treated mock vs. SARS (MOIs 0.2 or 2), RSV (MOIs 2 or 15) or HIPV3 (MOI 3) for 24 h
 * human A549 cells treated mock vs. IAV (MOI 5) for 9 h
 * human A549-ACE2 treated mock vs. SARS (MOIs 0.2, 2) or pretreated with Ruxolitinib and then SARS (MOI 2) for 24 h
 * human Calu3 cell line treated mock vs. SARS (MOI 2) for 24 h
-* _in vivo_ nasal wash and trachea samples from ferrets treated mock vs. SARS (5E4 PFU) or IAV (1E5 PFU) for 1, 3, 7 or 14 days
+* _in vivo_ nasal wash and trachea (only one time point) samples from ferrets treated mock vs. SARS (5E4 PFU) for 1, 3, 7 or 14 days, and IAV (1E5 PFU) at day 7 only
 * some other lung biopsies from patients
 
-While no gene ontology is available for furret, the time course experiment _in vivo_ and the comparison with _ex vivo_ data using primary normal human bronchial epithelia (NHBE) cells seem to be a reasonable starting point for multivariate analysis of the gene signatures regulated during the infection with SARS-CoV-2. Moreover we can compare the gene signatures to the ones induced after infection with influenza A virus.  
+While no gene ontology is available for furret, the time course in the _in vivo_ experiment and the comparison with _ex vivo_ data using primary normal human bronchial epithelia (NHBE) cells seem to be an interesting starting point for multivariate analysis of the gene signatures regulated during the infection with SARS-CoV-2. Moreover we can compare the responses to the ones induced after infection with influenza A virus.  
 The plan for the challenge is therefore:
 
-1. classical RNAseq data analysis including filtering, normalization and PCA in both the human primary cells and ferret samples
+1. classical RNAseq data analysis including filtering, normalization and PCA in both the human primary cells infected with SARS or IAV, and ferret's nasal wash samples
 2. DEG in human primary cells up to heatmap and functional enrichment analysis
 3. module identification in multiple datasets defined as mock, SARS and IAV during the time course of the infection using `clust`
 
@@ -58,12 +49,12 @@ All graphics and data wrangling were handled using the [tidyverse suite of packa
 
 ## Read the data
 
-The goal of this short script to it make sure we are able to read the count data and the study design for the COVID hackdash into the R environment using tidyverse
+The goal of this short script to it make sure we are able to read the count data and the study design for the COVID hackdash into the R environment using tidyverse. Both the human and ferret expression data have been obtained as **raw count tables** from the public GEO entry (see challenge description for more details), therefore no annotation is required.
 
 ```{r data import}
 library(tidyverse)
 
-# Reading in study design incl all info for both human and ferret samples
+# Reading in study design **as tibble** incl all info for both human and ferret samples
 targets <- read_tsv("covid_metadata.txt")
 
 # human covid data read/converted to a matrix with gene symbols as rownames
@@ -77,382 +68,641 @@ ferret_covid_data <- as.matrix(column_to_rownames(ferret_covid_data, "X1"))
 # then the datatype is homogeneous in the matrices
 ```
 
-### Aligning raw reads with Kallisto
+When we look at the variables of the targets dataframe: `r colnames(targets)`, it seems straightforward to subset data from human and ferret experiments since unique elements from the `host_common_name` variable are `r unique(targets$host_common_name)`.
 
-Raw reads were mapped to the human reference transcriptome using [Kallisto](https://pachterlab.github.io/kallisto/), version 0.46.2.  The quality of raw reads, as well as the results of Kallisto mapping are summarized in [this summary report](http://DIYtranscriptomics.github.io/Data/files/multiqc_report.html) generated using [fastqc](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and [multiqc](https://multiqc.info/).
+### Data filtering
 
-***
+We then prepare and subset data we are interested in for this analysis. In the human experiment we keep the data from primary NHBE samples infected with mock, SARS or IAV (not the other conditions) thanks to the elements in the `tissue_cell_type` variable: `r unique(targets$tissue_cell_type)`. Of note we pool together the data of mock-treated cells after 12 **and** 24 hours.
 
-### Importing count data into R
+```{r data subsetting human}
+targets_human <- targets %>%
+  dplyr::select(sample, host_common_name, tissue_cell_type, treatment) %>%
+  # timepoint not used here
+  dplyr::filter(host_common_name == "human" &
+                  tissue_cell_type == "primary human bronchial epithelial cells" &
+                  treatment %in% c("Mock treatment", "SARS-CoV-2 infected (MOI 2)",
+                                 "IAV infected (MOI 3)"))
 
-After read mapping with Kallisto, [TxImport](https://bioconductor.org/packages/release/bioc/html/tximport.html) was used to read kallisto outputs into the R environment.  Annotation data from Biomart was used to summarize data from transcript-level to gene-level.
+# then we don't need the host_common_name and tissue_cell_type anymore
+targets_ferret <- targets_human %>%
+  dplyr::select(sample, treatment)
 
-```{r step 1 - TxImport}
-library(tidyverse) # provides access to Hadley Wickham's collection of R packages for data science
-library(tximport) # package for getting Kallisto results into R
-library(ensembldb) # helps deal with ensembl
-library(EnsDb.Hsapiens.v86) # replace with your organism-specific database package
-targets <- read_tsv("../3-read_mapping_Kallisto/test/studydesign.txt") # read in your study design
-path <- file.path("../3-read_mapping_Kallisto/test", targets$sample, "abundance.tsv") # set file paths to your mapped data
-Tx <- transcripts(EnsDb.Hsapiens.v86, columns=c("tx_id", "gene_name"))
-Tx <- as_tibble(Tx)
-Tx <- dplyr::rename(Tx, target_id = tx_id)
-Tx <- dplyr::select(Tx, "target_id", "gene_name")
-Txi_gene <- tximport(path,
-                     type = "kallisto",
-                     tx2gene = Tx,
-                     txOut = FALSE, # determines whether your data represented at transcript or gene level
-                     countsFromAbundance = "lengthScaledTPM",
-                     ignoreTxVersion = TRUE)
+treatment_human <- factor(targets_human$treatment,
+                           levels = c("Mock treatment", "SARS-CoV-2 infected (MOI 2)",
+                                      "IAV infected (MOI 3)"),
+                           labels = c("ctrl", "SARS", "IAV"))
+
+# and finally we keep only the columns of interest in the count matrix
+human_data <- human_covid_data[, targets_human$sample]
+
 ```
 
+Before subsetting the human data, the dimension of the original human_covid_data was `r dim(human_covid_data)`and after cleaning, the dimension of the human_data is `r dim(human_data)`.
+
+In the _in vivo_ study, all the data with nasal wash sample type are kept thanks to the elements in the `tissue_cell_type` variable: `r unique(targets$tissue_cell_type)`.
+
+```{r data subsetting ferret}
+# we first select the columns of interest and further filter of ferret data
+targets_ferret <- targets %>%
+  dplyr::select(sample, host_common_name, tissue_cell_type, treatment, timepoint_postTreament) %>% # beware the typo in 'Treament'
+  dplyr::filter(host_common_name == "ferret" & tissue_cell_type == "Nasal Wash")
+
+# then we don't need the host_common_name and tissue_cell_type anymore
+targets_ferret <- dplyr::select(targets_ferret, sample, treatment, timepoint_postTreament)
+colnames(targets_ferret) <- c("sample", "treatment", "time")
+
+treatment_ferret <- factor(targets_ferret$treatment,
+                           levels = c("Mock treatment", "SARS-CoV-2 infected (5E4 PFU)",
+                                      "IAV infected (1E5 PFU)"),
+                           labels = c("ctrl", "SARS", "IAV"))
+time_ferret <- factor(targets_ferret$time,
+                      levels = c("day1", "day3", "day7", "day14"),
+                      labels = c(1, 3, 7, 14))
+
+# and finally we keep only the columns of interest in the count matrix
+ferret_data <- ferret_covid_data[, targets_ferret$sample]
+```
+
+Before subsetting the ferret data, the dimension of the original ferret_covid_data was `r dim(ferret_covid_data)`and after cleaning, the dimension of the ferret_data is `r dim(ferret_data)`.
+
 ***
 
-## Preprocessing
+## Preprocessing human dataset
 
 ### Impact of filtering and normalization
 
-```{r step2 - dataWrangling}
-library(tidyverse)
+```{r function profile, echo=TRUE}
 library(edgeR)
 library(matrixStats)
+
+# the function below is used for ploting violins
+profile_function <- function(data, samples, title, subtitle) {
+    data_count <- edgeR::cpm(data, log = TRUE)
+    data_count_df <- tibble::as_tibble(data_count, rownames = "geneID")
+    colnames(data_count_df) <- c("geneID", samples)
+    data_count_df_pivot <- tidyr::pivot_longer(data_count_df,
+                                               cols = -1, # all except col 1
+                                               names_to = "samples",
+                                               values_to = "expression")
+
+    ggplot(data_count_df_pivot) +
+      aes(x = samples, y = expression, fill = samples) +
+      geom_violin(trim = FALSE, show.legend = FALSE) +
+      stat_summary(fun = "median",
+                   geom = "point",
+                   shape = 95,
+                   size = 10,
+                   color = "black",
+                   show.legend = FALSE) +
+      labs(y = "log2 expression", x = "sample",
+           title = title,
+           subtitle = subtitle) +
+      theme_bw() +
+      theme(axis.text.x=element_blank(), # hide x tick labels
+            plot.title = element_text(size=12))
+}
+```
+
+```{r data wrangling human dataset}
 library(cowplot)
+human_sample_labels <- targets_human$sample
+human_DGEList <- DGEList(human_data)
+# we take advantage of the profile_function that return violin_plot of cpm
+human_p1 <- profile_function(data = human_DGEList,
+                             samples = human_sample_labels,
+                             title = "human dataset",
+                             subtitle = "unfiltered, non-normalized")
 
-sampleLabels <- targets$sample
-myDGEList <- DGEList(Txi_gene$counts)
-log2.cpm <- cpm(myDGEList, log=TRUE)
+human_cpm <- cpm(human_DGEList)
+human_keepers <- rowSums(human_cpm > 1) >= 3 # there are triplic/quadrupl-ates
+human_DGEList_filtered <- human_DGEList[human_keepers, ]
+human_p2 <- profile_function(data = human_DGEList_filtered,
+                             samples = human_sample_labels,
+                             title = "human dataset",
+                             subtitle = "filtered, non-normalized")
 
-log2.cpm.df <- as_tibble(log2.cpm, rownames = "geneID")
-colnames(log2.cpm.df) <- c("geneID", sampleLabels)
-log2.cpm.df.pivot <- pivot_longer(log2.cpm.df, # dataframe to be pivoted
-                                  cols = HS01:CL13, # column names to be stored as a SINGLE variable
-                                  names_to = "samples", # name of that new variable (column)
-                                  values_to = "expression") # name of new variable (column) storing all the values (data)
+human_DGEList_filtered_norm <- calcNormFactors(human_DGEList_filtered,
+                                               method = "TMM")
+human_p3 <- profile_function(data = human_DGEList_filtered_norm,
+                             samples = human_sample_labels,
+                             title = "human dataset",
+                             subtitle = "filtered, normalized")
 
-p1 <- ggplot(log2.cpm.df.pivot) +
-  aes(x=samples, y=expression, fill=samples) +
-  geom_violin(trim = FALSE, show.legend = FALSE) +
-  stat_summary(fun = "median",
-               geom = "point",
-               shape = 95,
-               size = 10,
-               color = "black",
-               show.legend = FALSE) +
-  labs(y="log2 expression", x = "sample",
-       title="Log2 Counts per Million (CPM)",
-       subtitle="unfiltered, non-normalized",
-       caption=paste0("produced on ", Sys.time())) +
-  theme_bw()
-
-cpm <- cpm(myDGEList)
-keepers <- rowSums(cpm>1)>=5 #user defined
-myDGEList.filtered <- myDGEList[keepers,]
-
-log2.cpm.filtered <- cpm(myDGEList.filtered, log=TRUE)
-log2.cpm.filtered.df <- as_tibble(log2.cpm.filtered, rownames = "geneID")
-colnames(log2.cpm.filtered.df) <- c("geneID", sampleLabels)
-log2.cpm.filtered.df.pivot <- pivot_longer(log2.cpm.filtered.df, # dataframe to be pivoted
-                                           cols = HS01:CL13, # column names to be stored as a SINGLE variable
-                                           names_to = "samples", # name of that new variable (column)
-                                           values_to = "expression") # name of new variable (column) storing all the values (data)
-
-p2 <- ggplot(log2.cpm.filtered.df.pivot) +
-  aes(x=samples, y=expression, fill=samples) +
-  geom_violin(trim = FALSE, show.legend = FALSE) +
-  stat_summary(fun = "median",
-               geom = "point",
-               shape = 95,
-               size = 10,
-               color = "black",
-               show.legend = FALSE) +
-  labs(y="log2 expression", x = "sample",
-       title="Log2 Counts per Million (CPM)",
-       subtitle="filtered, non-normalized",
-       caption=paste0("produced on ", Sys.time())) +
-  theme_bw()
-
-myDGEList.filtered.norm <- calcNormFactors(myDGEList.filtered, method = "TMM")
-log2.cpm.filtered.norm <- cpm(myDGEList.filtered.norm, log=TRUE)
-log2.cpm.filtered.norm.df <- as_tibble(log2.cpm.filtered.norm, rownames = "geneID")
-colnames(log2.cpm.filtered.norm.df) <- c("geneID", sampleLabels)
-log2.cpm.filtered.norm.df.pivot <- pivot_longer(log2.cpm.filtered.norm.df, # dataframe to be pivoted
-                                                cols = HS01:CL13, # column names to be stored as a SINGLE variable
-                                                names_to = "samples", # name of that new variable (column)
-                                                values_to = "expression") # name of new variable (column) storing all the values (data)
-
-p3 <- ggplot(log2.cpm.filtered.norm.df.pivot) +
-  aes(x=samples, y=expression, fill=samples) +
-  geom_violin(trim = FALSE, show.legend = FALSE) +
-  stat_summary(fun = "median",
-               geom = "point",
-               shape = 95,
-               size = 10,
-               color = "black",
-               show.legend = FALSE) +
-  labs(y="log2 expression", x = "sample",
-       title="Log2 Counts per Million (CPM)",
-       subtitle="filtered, TMM normalized",
-       caption=paste0("produced on ", Sys.time())) +
-  theme_bw()
-
-plot_grid(p1, p2, p3, labels = c('A', 'B', 'C'), label_size = 12)
+plot_grid(human_p1, human_p2, human_p3,
+          labels = c('A', 'B', 'C'),
+          label_size = 12)
 ```
 
-Filtering was carried out to remove lowly expressed genes. Genes with less than 1 count per million (CPM) in at least 5 or more samples filtered out.  This reduced the number of genes from `r nrow(myDGEList)` to `r nrow(myDGEList.filtered)`.
-
-***
-
-### table of filtered and normalized data
-
-```{r step 3 - multivariate part 1 (data table)}
-library(tidyverse)
-library(DT)
-library(gt)
-library(plotly)
-
-mydata.df <- mutate(log2.cpm.filtered.norm.df,
-                    healthy.AVG = (HS01 + HS02 + HS03 + HS04 + HS05)/5,
-                    disease.AVG = (CL08 + CL10 + CL11 + CL12 + CL13)/5,
-                    #now make columns comparing each of the averages above that you're interested in
-                    LogFC = (disease.AVG - healthy.AVG)) %>% #note that this is the first time you've seen the 'pipe' operator
-  mutate_if(is.numeric, round, 2)
-
-datatable(mydata.df[,c(1,12:14)],
-          extensions = c('KeyTable', "FixedHeader"),
-          filter = 'top',
-          options = list(keys = TRUE,
-                         searchHighlight = TRUE,
-                         pageLength = 10,
-                         lengthMenu = c("10", "25", "50", "100")))
-```
-
-The table shown below includes expression data for `r nrow(myDGEList.filtered)` genes. You can sort and search the data directly from the table.
+Filtering was carried out to remove lowly expressed genes. Genes with less than 1 count per million (CPM) in at least 5 or more samples filtered out.  This reduced the number of genes from `r nrow(human_DGEList)` to `r nrow(human_DGEList_filtered)`.
 
 ***
 
 ## PCA plot
 
-```{r step 3 - multivariate part 2 (PCA plot)}
-group <- targets$group
-group <- factor(group)
+Time to see if infection with SARS-CoV-2 induces a particular gene expression signature, and if this one is different after infection with IAV. The treatment groups have been already factorized, see: `r treatment_human`. _Note: As we don't really need any table for the time being, no datatable is produced in this document._
 
-pca.res <- prcomp(t(log2.cpm.filtered.norm), scale.=F, retx=T)
-pc.var<-pca.res$sdev^2 # sdev^2 captures these eigenvalues from the PCA result
-pc.per<-round(pc.var/sum(pc.var)*100, 1)
-pca.res.df <- as_tibble(pca.res$x)
-pca.plot <- ggplot(pca.res.df) +
-  aes(x=PC1, y=PC2, label=sampleLabels, color = group) +
-  geom_point(size=4) +
+```{r PCA plot human dataset}
+human_pca_res <- prcomp(t(data.matrix(human_DGEList_filtered_norm)), scale.=F, retx=T)
+human_pc_var <- human_pca_res$sdev^2
+human_pc_per <- round(human_pc_var/sum(human_pc_var) * 100, 1)
+human_pca_res_df <- as_tibble(human_pca_res$x)
+
+ggplot(human_pca_res_df) +
+  aes(x = PC1, y = PC2, label = human_sample_labels, color = treatment_human) +
+  geom_point(size = 4) +
   stat_ellipse() +
-  xlab(paste0("PC1 (",pc.per[1],"%",")")) +
-  ylab(paste0("PC2 (",pc.per[2],"%",")")) +
-  labs(title="PCA plot",
-       caption=paste0("produced on ", Sys.time())) +
+  xlab(paste0("PC1 (", human_pc_per[1], "%", ")")) +
+  ylab(paste0("PC2 (", human_pc_per[2], "%", ")")) +
+  labs(title = "PCA plot") +
   coord_fixed() +
   theme_bw()
-
-ggplotly(pca.plot)
 ```
+This is not super convincing although PC1 and PC2 account for `r paste0(human_pc_per[1] + human_pc_per[2], "%")` of the total variance.
 
 ***
 
-## Volcano plot
-
-```{r step 5 - diffGenes part 1 (volcano plot)}
-library(tidyverse)
-library(limma)
-library(edgeR)
-library(gt)
-library(DT)
-library(plotly)
-
-group <- factor(targets$group)
-design <- model.matrix(~0 + group)
-colnames(design) <- levels(group)
-
-v.DEGList.filtered.norm <- voom(myDGEList.filtered.norm, design, plot = FALSE)
-fit <- lmFit(v.DEGList.filtered.norm, design)
-contrast.matrix <- makeContrasts(infection = disease - healthy,
-                                 levels=design)
-
-fits <- contrasts.fit(fit, contrast.matrix)
-ebFit <- eBayes(fits)
-myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
-
-myTopHits.df <- myTopHits %>%
-  as_tibble(rownames = "geneID")
-
-vplot <- ggplot(myTopHits.df) +
-  aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", geneID)) +
-  geom_point(size=2) +
-  geom_hline(yintercept = -log10(0.01), linetype="longdash", colour="grey", size=1) +
-  geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", size=1) +
-  geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", size=1) +
-  #annotate("rect", xmin = 1, xmax = 12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#BE684D") +
-  #annotate("rect", xmin = -1, xmax = -12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#2C467A") +
-  labs(title="Volcano plot",
-       subtitle = "Cutaneous leishmaniasis",
-       caption=paste0("produced on ", Sys.time())) +
-  theme_bw()
-
-ggplotly(vplot)
-```
-
-***
-
-## Table of DEGs
+## Differentially expressed genes
 
 To identify differentially expressed genes, precision weights were first applied to each gene based on its mean-variance relationship using [VOOM](https://genomebiology.biomedcentral.com/articles/10.1186/gb-2014-15-2-r29), then data was normalized using the [TMM method](https://genomebiology.biomedcentral.com/articles/10.1186/gb-2010-11-3-r25) in [EdgeR](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2796818/).  Linear modeling and bayesian stats were employed via [Limma](https://academic.oup.com/nar/article/43/7/e47/2414268) to find genes that were up- or down-regulated in leishmania patients by 4-fold or more, with a false-discovery rate (FDR) of 0.01.
 
-```{r step 5 - diffGenes part 2 (DEG table)}
-results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.01, lfc=2)
-colnames(v.DEGList.filtered.norm$E) <- sampleLabels
-diffGenes <- v.DEGList.filtered.norm$E[results[,1] !=0,]
-diffGenes.df <- as_tibble(diffGenes, rownames = "geneID")
-datatable(diffGenes.df,
-          extensions = c('KeyTable', "FixedHeader"),
-          caption = 'Table 1: DEGs in cutaneous leishmaniasis',
-          options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
-  formatRound(columns=c(2:11), digits=2)
+### Volcano plot
+
+Let's see if there is any interesting gene differentially expressed detected between SARS-CoV-2 and mock conditions.
+
+```{r differential genes human dataset (volcano plot)}
+library(limma)
+library(edgeR)
+library(gt)
+
+design <- model.matrix(~0 + treatment_human)
+colnames(design) <- levels(treatment_human)
+
+v_human_DGEList_filtered_norm <- voom(human_DGEList_filtered_norm, design, plot = F)
+human_fit <- lmFit(v_human_DGEList_filtered_norm, design)
+human_contrast_matrix <- makeContrasts(infection = SARS - ctrl,
+                                       levels = design)
+
+human_fits <- contrasts.fit(human_fit, human_contrast_matrix)
+human_ebFit <- eBayes(human_fits)
+human_top_hits <- topTable(human_ebFit,
+                           adjust = "BH",
+                           coef = 1,
+                           number = 20000,
+                           sort.by = "logFC")
+
+human_top_hits_df <- human_top_hits %>%
+  as_tibble(rownames = "geneID")
+
+ggplot(human_top_hits_df) +
+  aes(y = -log10(adj.P.Val), x = logFC, text = paste("Symbol:", geneID)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = -log10(0.05), linetype="longdash", colour="grey", size=1) +
+  geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", size=1) +
+  geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", size=1) +
+  labs(title="Volcano plot",
+       subtitle = "Infection with SARS-CoV-2 vs. mock (24 h)") +
+  theme_bw()
 ```
+From the volcano plot, it seems that a dozen of genes are upregulated after infection by SARS-CoV-2.
+
+***
+
+### Table of DEGs
+
+```{r differential genes human dataset (DEG table)}
+human_results <- decideTests(human_ebFit,
+                             method = "global",
+                             adjust.method = "BH",
+                             p.value = 0.05,
+                             lfc = 1)
+colnames(v_human_DGEList_filtered_norm$E) <- human_sample_labels
+human_diffGenes <- v_human_DGEList_filtered_norm$E[human_results[, 1] !=0, ]
+human_diffGenes_df <- as_tibble(human_diffGenes, rownames = "geneID")
+
+human_diffGenes_df %>%
+  sample_n(10) %>%
+  gt() %>%
+  fmt_number(columns = 2:11, decimals = 2)
+```
+Great to see IL-6 in the list, but nothing obvious otherwise...
 
 ***
 
 ## Heatmaps and modules
 
-Pearson correlation was used to cluster **`r nrow(diffGenes)`** differentially expressed genes, which were then represented as heatmap with the data scaled by Zscore for each row.
+Pearson correlation was used to cluster **`r nrow(human_diffGenes)`** differentially expressed genes, which were then represented as heatmap with the data scaled by Zscore for each row.
 
-```{r step 6 - modules part 1 (heatmap)}
-library(tidyverse)
+```{r modules human dataset (heatmap)}
 library(gplots)
 library(RColorBrewer)
+
 myheatcolors <- rev(brewer.pal(name="RdBu", n=11))
-clustRows <- hclust(as.dist(1-cor(t(diffGenes), method="pearson")), method="complete") #cluster rows by pearson correlation
-clustColumns <- hclust(as.dist(1-cor(diffGenes, method="spearman")), method="complete")
-module.assign <- cutree(clustRows, k=2)
+
+clustRows <- hclust(as.dist(1 - cor(t(human_diffGenes),
+                                    method = "pearson")),
+                    method = "complete")
+clustColumns <- hclust(as.dist(1 - cor(human_diffGenes,
+                                       method="spearman")),
+                       method="complete")
+
+module.assign <- cutree(clustRows, k = 2)
 module.color <- rainbow(length(unique(module.assign)), start=0.1, end=0.9)
 module.color <- module.color[as.vector(module.assign)]
-heatmap.2(diffGenes,
-          Rowv=as.dendrogram(clustRows),
-          Colv=as.dendrogram(clustColumns),
-          RowSideColors=module.color,
-          col=myheatcolors, scale='row', labRow=NA,
-          density.info="none", trace="none",
-          cexRow=1, cexCol=1, margins=c(8,20))
+heatmap.2(human_diffGenes,
+          Rowv = as.dendrogram(clustRows),
+          Colv = as.dendrogram(clustColumns),
+          RowSideColors = module.color,
+          col = myheatcolors, scale = 'row', labRow = NA,
+          density.info = "none", trace = "none",
+          cexRow = 1, cexCol = 1, margins = c(8,8))
 ```
+It looks like most of the genes are upregulated upon infection with SARS-CoV-2. Interestinlgy infection with IAV also lead to a similar profile but to a lesser extent. We then focus the rest of the analysis with upregulated genes. Of note, some replicate in the IAV treatment group have kind of opposite profile, which fits well with the PCA analysis.
 
-```{r step 6 - modules part 2 (upregulated genes)}
+```{r modules human dataset (upregulated genes)}
 modulePick <- 2
-myModule_up <- diffGenes[names(module.assign[module.assign %in% modulePick]),]
-hrsub_up <- hclust(as.dist(1-cor(t(myModule_up), method="pearson")), method="complete")
+myModule_up <- human_diffGenes[names(module.assign[module.assign %in% modulePick]), ]
+hrsub_up <- hclust(as.dist(1 - cor(t(myModule_up),
+                                   method = "pearson")), 
+                   method = "complete")
 
 heatmap.2(myModule_up,
-          Rowv=as.dendrogram(hrsub_up),
-          Colv=NA,
+          Rowv = as.dendrogram(hrsub_up),
+          Colv = NA,
           labRow = NA,
-          col=myheatcolors, scale="row",
-          density.info="none", trace="none",
-          RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
-```
-
-```{r step 6 - modules part 3 (downregulated genes)}
-modulePick <- 1
-myModule_down <- diffGenes[names(module.assign[module.assign %in% modulePick]),]
-hrsub_down <- hclust(as.dist(1-cor(t(myModule_down), method="pearson")), method="complete")
-
-heatmap.2(myModule_down,
-          Rowv=as.dendrogram(hrsub_down),
-          Colv=NA,
-          labRow = NA,
-          col=myheatcolors, scale="row",
-          density.info="none", trace="none",
-          RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
+          col = myheatcolors, scale = "row",
+          density.info = "none", trace = "none",
+          RowSideColors = module.color[module.assign %in% modulePick],
+          margins=c(10,8))
 ```
 
 ## GO enrichment
 
-GO enrichment for the `r nrow(myTopHits)` genes induced by infection
+GO enrichment for the `r nrow(myModule_up)` genes induced by infection with SARS-Cov-2
 
-```{r step 7 - functionalEnrichment part 1 (gostplot for upregulated genes)}
-library(tidyverse)
-library(limma)
-library(gplots) #f or heatmaps
-library(DT) # interactive and searchable tables of our GSEA results
+```{r functional enrichment human dataset (gostplot for upregulated genes)}
 library(GSEABase) # functions and methods for Gene Set Enrichment Analysis
 library(Biobase) # base functions for bioconductor; required by GSEABase
 library(GSVA) # GSVA, a non-parametric and unsupervised method for estimating variation of gene set enrichment across samples
 library(gprofiler2) # tools for accessing the GO enrichment results using g:Profiler web resources
 library(clusterProfiler) # provides a suite of tools for functional enrichment analysis
-library(msigdbr) # access to msigdb collections directly within R
-library(enrichplot) # great for making the standard GSEA enrichment plots
-gost.res_up <- gost(rownames(myModule_up), organism = "hsapiens", correction_method = "fdr")
-gostplot(gost.res_up, interactive = T, capped = T) # set interactive=FALSE to get plot for publications
+gost.res_up <- gost(rownames(myModule_up),
+                    organism = "hsapiens",
+                    correction_method = "fdr")
+gostplot(gost.res_up,
+         interactive = F,
+         capped = F) # set interactive=FALSE to get plot for publications
 ```
-
-```{r step 7 - functionalEnrichment part 2 (gostplot for downregulated genes)}
-gost.res_down <- gost(rownames(myModule_down), organism = "hsapiens", correction_method = "fdr")
-gostplot(gost.res_down, interactive = T, capped = T) #set interactive=FALSE to get plot for publications
-```
+Most of the upregulated genes lies within the **cellular component** ontology group. It might also be interesting to see more closely what are the genes in the WP group.
 
 ## GSEA
 
-```{r step 7 - functionalEnrichment part 3 (GSEA table)}
-hs_gsea_c2 <- msigdbr(species = "Homo sapiens", # change depending on species your data came from
-                      category = "C2") %>% # choose your msigdb collection of interest
+```{r functional enrichment human dataset (GSEA table)}
+library(msigdbr) # access to msigdb collections directly within R
+library(enrichplot) # great for making the standard GSEA enrichment plots
+
+hs_gsea_c2 <- msigdbr(species = "Homo sapiens",
+                      category = "C2") %>%
   dplyr::select(gs_name, gene_symbol) # just get the columns corresponding to signature name and gene symbols of genes in each signature
 
 # Now that you have your msigdb collections ready, prepare your data
-# grab the dataframe you made in step3 script
 # Pull out just the columns corresponding to gene symbols and LogFC for at least one pairwise comparison for the enrichment analysis
+log2.cpm.filtered.norm.df <- cpm(human_DGEList_filtered_norm, log = TRUE) %>%
+  as_tibble(rownames = "geneID")
+# needs to rename columns
+colnames(log2.cpm.filtered.norm.df) <- c("geneID",
+                                         c("mock_1", "mock_2", "mock_3",
+                                           "sars_1", "sars_2", "sars_3",
+                                           "mock_4", "mock_5", "mock_6", "mock_7",
+                                           "iav_1", "iav_2", "iav_3", "iav_4"))
+mydata.df <- log2.cpm.filtered.norm.df  %>%
+  mutate(mock.AVG = (mock_1 + mock_2 + mock_3 + mock_4 + mock_5 + mock_6 + mock_7) / 7,
+         infect.AVG = (sars_1 + sars_2 + sars_3) / 3,
+         #now make columns comparing each of the averages above that you're interested in
+         LogFC = (infect.AVG - mock.AVG)) %>%
+  mutate_if(is.numeric, round, 2)
+# Pull out just the columns corresponding to gene symbols and LogFC for at least one pairwise comparison for the enrichment analysis
+mydata.df.sub <- dplyr::select(mydata.df, geneID, LogFC)
+# construct a named vector
+mydata.gsea <- mydata.df.sub$LogFC
+names(mydata.gsea) <- as.character(mydata.df.sub$geneID)
+mydata.gsea <- sort(mydata.gsea, decreasing = TRUE)
+
+
 mydata.df.sub <- dplyr::select(mydata.df, geneID, LogFC)
 mydata.gsea <- mydata.df.sub$LogFC
 names(mydata.gsea) <- as.character(mydata.df.sub$geneID)
 mydata.gsea <- sort(mydata.gsea, decreasing = TRUE)
 
 # run GSEA using the 'GSEA' function from clusterProfiler
-myGSEA.res <- GSEA(mydata.gsea, TERM2GENE=hs_gsea_c2, verbose=FALSE)
+myGSEA.res <- GSEA(mydata.gsea,
+                   TERM2GENE = hs_gsea_c2,
+                   verbose=FALSE)
 myGSEA.df <- as_tibble(myGSEA.res@result)
 
-# view results as an interactive table
-datatable(myGSEA.df,
-          extensions = c('KeyTable', "FixedHeader"),
-          caption = 'Signatures enriched in leishmaniasis',
-          options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
-  formatRound(columns=c(3:10), digits=2)
+# view results as a table
+myGSEA.df %>%
+  dplyr::arrange(NES) %>%
+  sample_n(10) %>%
+  gt()
 ```
 
-```{r step 7 - functionalEnrichment part 4 (enrich plot)}
+```{r functional enrichment human dataset IL-6 pathway (enrich plot)}
 # create enrichment plots using the enrichplot package
 gseaplot2(myGSEA.res,
-          geneSetID = 47, #can choose multiple signatures to overlay in this plot
+          geneSetID = 21, # IL-6 signaling pathway
           pvalue_table = FALSE, #can set this to FALSE for a cleaner plot
-          title = myGSEA.res$Description[47]) #can also turn off this title
+          title = "IL-6 signaling pathway")
 ```
 
-```{r step 7 - functionalEnrichment part 5 (bubble plot)}
+```{r functional enrichment human dataset (bubble plot)}
 # add a variable to this result that matches enrichment direction with phenotype
 myGSEA.df <- myGSEA.df %>%
   mutate(phenotype = case_when(
-    NES > 0 ~ "disease",
-    NES < 0 ~ "healthy"))
+    NES > 0 ~ "infected",
+    NES < 0 ~ "control"))
 
 # create 'bubble plot' to summarize y signatures across x phenotypes
-ggplot(myGSEA.df[1:20,], aes(x=phenotype, y=ID)) +
-  geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
-  scale_color_gradient(low="blue", high="red") +
+ggplot(myGSEA.df[1:20,],
+       aes(x=phenotype, y=ID)) +
+  geom_point(aes(size=setSize,
+                 color = NES,
+                 alpha = -log10(p.adjust))) +
+  scale_color_gradient(low = "blue", high = "red") +
   theme_bw()
 ```
 
 ***
 
+## Preprocessing ferret dataset
+
+### Impact of filtering and normalization
+
+```{r data wrangling ferret dataset}
+ferret_sample_labels <- targets_ferret$sample
+ferret_DGEList <- DGEList(ferret_data)
+# we take advantage of the profile_function that return violin_plot of cpm
+ferret_p1 <- profile_function(data = ferret_DGEList,
+                              samples = ferret_sample_labels,
+                              title = "ferret dataset",
+                              subtitle = "unfiltered, non-normalized")
+
+ferret_cpm <- cpm(ferret_DGEList)
+ferret_keepers <- rowSums(ferret_cpm > 10) >= 2 # all duplicates
+ferret_DGEList_filtered <- ferret_DGEList[ferret_keepers, ]
+ferret_p2 <- profile_function(data = ferret_DGEList_filtered,
+                              samples = ferret_sample_labels,
+                              title = "ferret dataset",
+                              subtitle = "filtered, non-normalized")
+
+ferret_DGEList_filtered_norm <- calcNormFactors(ferret_DGEList_filtered,
+                                               method = "TMM")
+ferret_p3 <- profile_function(data = ferret_DGEList_filtered_norm,
+                              samples = ferret_sample_labels,
+                              title = "ferret dataset",
+                              subtitle = "filtered, normalized")
+
+plot_grid(ferret_p1, ferret_p2, ferret_p3,
+          labels = c('A', 'B', 'C'),
+          label_size = 12)
+```
+
+Filtering was carried out to remove lowly expressed genes. The threshold count is somehow higher than for human data, and does not filter all the lowly expressed genes, but looking at the non-normalized data it seems important not to increase the threshold in order to detetct relatively lowly expressed genes in some groups. Genes with less than 1 count per million (CPM) in at least 5 or more samples filtered out.  This reduced the number of genes from `r nrow(ferret_DGEList)` to `r nrow(ferret_DGEList_filtered)`.
+
+***
+
+## PCA plot ferret data
+
+Time to see if infection with SARS-CoV-2 induces a particular gene expression signature, and if this one is different after infection with IAV. The treatment groups have been already factorized, see: `r treatment_ferret`. The idea here is to look at the PCA and create module for clust.
+
+```{r PCA plot ferret dataset}
+ferret_pca_res <- prcomp(t(data.matrix(ferret_DGEList_filtered_norm)), scale.=F, retx=T)
+ferret_pc_var <- ferret_pca_res$sdev^2
+ferret_pc_per <- round(ferret_pc_var/sum(ferret_pc_var) * 100, 1)
+ferret_pca_res_df <- as_tibble(ferret_pca_res$x)
+
+ggplot(ferret_pca_res_df) +
+  aes(x = PC1, y = PC2, label = ferret_sample_labels,
+      color = time_ferret,
+      shape = treatment_ferret) +
+  geom_point(size = 4) +
+  #stat_ellipse() +
+  xlab(paste0("PC1 (", ferret_pc_per[1], "%", ")")) +
+  ylab(paste0("PC2 (", ferret_pc_per[2], "%", ")")) +
+  labs(title = "PCA plot",
+       subtitle = "ferret dataset") +
+  coord_fixed() +
+  theme_bw()
+```
+This is not easy to interpret although PC1 and PC2 account for `r paste0(ferret_pc_per[1] + ferret_pc_per[2], "%")` of the total variance. It seems that no difference is detected at earlier time points but only between control and SARS groups at day 14 post-infection, though duplicates are spread. Let's have a look at other PCs.
+
+```{r PCA ferret multiple charts}
+pca.res.df <- ferret_pca_res$x[, 1:4] %>%
+  as_tibble() %>%
+  add_column(sample = ferret_sample_labels,
+             treatment = treatment_ferret)
+  
+pca.pivot <- pivot_longer(pca.res.df,
+                          cols = PC1:PC4,
+                          names_to = "PC",
+                          values_to = "loadings")
+
+ggplot(pca.pivot) +
+  aes(x = sample, y = loadings, fill = treatment) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~PC) +
+  labs(title = "PCA 'small multiples' plot",
+       subtitle = "ferret dataset") +
+  theme_bw() +
+  coord_flip()
+```
+That is really weird, one sample from the control group at day 14 seems to belong to the SARS group.
+
+***
+
+## Differentially expressed genes ferret
+
+Let's see if there is any interesting gene differentially expressed detected between SARS-CoV-2 and mock conditions.
+
+```{r diffGenes ferret dataset (volcano plot)}
+library(gt)
+
+design <- model.matrix(~0 + treatment_ferret)
+colnames(design) <- levels(treatment_ferret)
+
+v_ferret_DGEList_filtered_norm <- voom(ferret_DGEList_filtered_norm, design, plot = T)
+ferret_fit <- lmFit(v_ferret_DGEList_filtered_norm, design)
+ferret_contrast_matrix <- makeContrasts(infection = SARS - ctrl,
+                                        levels = design)
+
+ferret_fits <- contrasts.fit(ferret_fit, ferret_contrast_matrix)
+ferret_ebFit <- eBayes(ferret_fits)
+
+ferret_results <- decideTests(ferret_ebFit,
+                              method = "global",
+                              adjust.method = "BH",
+                              p.value = 0.01,
+                              lfc = 1)
+colnames(v_ferret_DGEList_filtered_norm$E) <- ferret_sample_labels
+ferret_diffGenes <- v_ferret_DGEList_filtered_norm$E[ferret_results[, 1] !=0, ]
+ferret_diffGenes_df <- as_tibble(ferret_diffGenes, rownames = "geneID")
+
+#ferret_diffGenes_df %>%
+#  sample_n(10) %>%
+#  gt() %>%
+#  fmt_number(columns = 2:11, decimals = 2)
+```
+
+The list is empty, let's check on a volcano plot.
+
+```{r differential genes ferret dataset (volcano plot)}
+ferret_top_hits <- topTable(ferret_ebFit,
+                            adjust = "BH",
+                            coef = 1,
+                            number = 20000,
+                            sort.by = "logFC")
+
+ferret_top_hits_df <- ferret_top_hits %>%
+  as_tibble(rownames = "geneID")
+
+ggplot(ferret_top_hits_df) +
+  aes(y = -log10(adj.P.Val), x = logFC, text = paste("Symbol:", geneID)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = -log10(0.05), linetype="longdash", colour="grey", size=1) +
+  geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", size=1) +
+  geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", size=1) +
+  labs(title="Volcano plot",
+       subtitle = "Infection with SARS-CoV-2 vs. mock (24 h)") +
+  theme_bw()
+```
+The analysis looks compromised for this timepoint as not significant logFC are detected, and we won't produce a clust. Let's filter this latest time point and redo all analyses for the ferret dataset.
+
+```{r data subsetting ferret 2}
+# we first select the columns of interest and further filter of ferret data
+targets_ferret <- targets %>%
+  dplyr::select(sample, host_common_name, tissue_cell_type, treatment, timepoint_postTreament) %>% # beware the typo in 'Treament'
+  dplyr::filter(host_common_name == "ferret" & tissue_cell_type == "Nasal Wash" & timepoint_postTreament != "day14")
+
+# then we don't need the host_common_name and tissue_cell_type anymore
+targets_ferret <- dplyr::select(targets_ferret, sample, treatment, timepoint_postTreament)
+colnames(targets_ferret) <- c("sample", "treatment", "time")
+
+treatment_ferret <- factor(targets_ferret$treatment,
+                           levels = c("Mock treatment", "SARS-CoV-2 infected (5E4 PFU)",
+                                      "IAV infected (1E5 PFU)"),
+                           labels = c("ctrl", "SARS", "IAV"))
+time_ferret <- factor(targets_ferret$time,
+                      levels = c("day1", "day3", "day7"),
+                      labels = c(1, 3, 7))
+
+# and finally we keep only the columns of interest in the count matrix
+ferret_data <- ferret_covid_data[, targets_ferret$sample]
+```
+
+```{r data wrangling ferret dataset 2}
+ferret_sample_labels <- targets_ferret$sample
+ferret_DGEList <- DGEList(ferret_data)
+# we take advantage of the profile_function that return violin_plot of cpm
+ferret_p1 <- profile_function(data = ferret_DGEList,
+                              samples = ferret_sample_labels,
+                              title = "ferret dataset",
+                              subtitle = "unfiltered, non-normalized")
+
+ferret_cpm <- cpm(ferret_DGEList)
+ferret_keepers <- rowSums(ferret_cpm > 10) >= 2 # all duplicates
+ferret_DGEList_filtered <- ferret_DGEList[ferret_keepers, ]
+ferret_p2 <- profile_function(data = ferret_DGEList_filtered,
+                              samples = ferret_sample_labels,
+                              title = "ferret dataset",
+                              subtitle = "filtered, non-normalized")
+
+ferret_DGEList_filtered_norm <- calcNormFactors(ferret_DGEList_filtered,
+                                               method = "TMM")
+ferret_p3 <- profile_function(data = ferret_DGEList_filtered_norm,
+                              samples = ferret_sample_labels,
+                              title = "ferret dataset",
+                              subtitle = "filtered, normalized")
+
+plot_grid(ferret_p1, ferret_p2, ferret_p3,
+          labels = c('A', 'B', 'C'),
+          label_size = 12)
+```
+
+```{r PCA plot ferret dataset 2}
+ferret_pca_res <- prcomp(t(data.matrix(ferret_DGEList_filtered_norm)), scale.=F, retx=T)
+ferret_pc_var <- ferret_pca_res$sdev^2
+ferret_pc_per <- round(ferret_pc_var/sum(ferret_pc_var) * 100, 1)
+ferret_pca_res_df <- as_tibble(ferret_pca_res$x)
+
+ggplot(ferret_pca_res_df) +
+  aes(x = PC1, y = PC2, label = ferret_sample_labels,
+      color = time_ferret,
+      shape = treatment_ferret) +
+  geom_point(size = 4) +
+  #stat_ellipse() +
+  xlab(paste0("PC1 (", ferret_pc_per[1], "%", ")")) +
+  ylab(paste0("PC2 (", ferret_pc_per[2], "%", ")")) +
+  labs(title = "PCA plot",
+       subtitle = "ferret dataset") +
+  coord_fixed() +
+  theme_bw()
+```
+
+Now it looks better, and while PC1 and PC2 account for `r paste0(ferret_pc_per[1] + ferret_pc_per[2], "%")` of the total variance, we can see IAV infection induces a specific gene expression signature compared to SARS at day 7 post-infection. Interestingly, SARS differs to some extent to the control group at day 3.
+
+```{r diffGenes ferret dataset (volcano plot) 2}
+library(gt)
+
+design <- model.matrix(~0 + treatment_ferret)
+colnames(design) <- levels(treatment_ferret)
+
+v_ferret_DGEList_filtered_norm <- voom(ferret_DGEList_filtered_norm, design, plot = T)
+ferret_fit <- lmFit(v_ferret_DGEList_filtered_norm, design)
+ferret_contrast_matrix <- makeContrasts(infection = SARS - ctrl,
+                                        levels = design)
+
+ferret_fits <- contrasts.fit(ferret_fit, ferret_contrast_matrix)
+ferret_ebFit <- eBayes(ferret_fits)
+
+ferret_results <- decideTests(ferret_ebFit,
+                              method = "global",
+                              adjust.method = "BH",
+                              p.value = 0.01,
+                              lfc = 1)
+colnames(v_ferret_DGEList_filtered_norm$E) <- ferret_sample_labels
+ferret_diffGenes <- v_ferret_DGEList_filtered_norm$E[ferret_results[, 1] !=0, ]
+ferret_diffGenes_df <- as_tibble(ferret_diffGenes, rownames = "geneID")
+```
+
+```{r differential genes ferret dataset (volcano plot) 2}
+ferret_top_hits <- topTable(ferret_ebFit,
+                            adjust = "BH",
+                            coef = 1,
+                            number = 20000,
+                            sort.by = "logFC")
+
+ferret_top_hits_df <- ferret_top_hits %>%
+  as_tibble(rownames = "geneID")
+
+ggplot(ferret_top_hits_df) +
+  aes(y = -log10(adj.P.Val), x = logFC, text = paste("Symbol:", geneID)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = -log10(0.05), linetype="longdash", colour="grey", size=1) +
+  geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", size=1) +
+  geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", size=1) +
+  labs(title="Volcano plot",
+       subtitle = "Infection with SARS-CoV-2 vs. mock (24 h)") +
+  theme_bw()
+```
+
+Again no significantly different gene expression could be observe after infection with SARS.
+
+***
+
 ## Conclusions
 
-Describe the results in your own words.  Some things to think about:
+The data are not super convincing to me, no huge gene signature popped up upon infection with SARS-CoV-2. Moreover there is not really a good rationale to compare data from IAV group as the infection time are different. Last point was to detect modules from _in vivo_ experiment with ferret using the clust software. Because de differential expression gene analysis was not conclusive, we did not run clust.
 
-* What are the key takeaways from the analysis?
-* What types of analyses would you want to do next?
-* Based on your analysis, are there any wet-lab experiments would might priortize?
-* How could you expand on or otherwise enhance this Rmarkdown report?
+Altogether, neither the _ex vivo_ experiment not the _in vivo_ data generated in ferret go in the direction of a dramatic gene signature in response to SARS-CoV-2 infection.
 
 ## Session info
 

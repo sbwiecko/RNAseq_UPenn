@@ -37,3 +37,6 @@
 .Rproj.user
 .Rhistory
 .RData
+
+# ignore Rmd files
+**/Rmarkdown_essentials_files/
