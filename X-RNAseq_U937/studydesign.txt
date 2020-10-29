@@ -1,0 +1,9 @@
+sample                        	sra_accession 	group
+Undifferentiated Ctrl sgRNA 1 	GSM2871538    	control
+Undifferentiated Ctrl sgRNA 2 	GSM2871539    	control
+Undifferentiated Ctrl sgRNA 3 	GSM2871540    	control
+Undifferentiated Ctrl sgRNA 4 	GSM2871541    	control
+Differentiated Ctrl sgRNA 1   	GSM2871546    	differentiated
+Differentiated Ctrl sgRNA 2   	GSM2871547    	differentiated
+Differentiated Ctrl sgRNA 3   	GSM2871548    	differentiated
+Differentiated Ctrl sgRNA 4   	GSM2871549    	differentiated

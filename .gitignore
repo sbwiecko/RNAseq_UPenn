@@ -1,6 +1,7 @@
-# ignore presentations and videos
+# ignore presentations, spreadsheets and videos
 *.pptx
 *.mp4
+*.xls*
 
 # ignore data files and collections
 *.h5
@@ -12,6 +13,7 @@
 *.index
 *.fastq
 **/schistosoma/ # ignore directory in any depth
+*.gtf
 
 # ignore the results from MultiQC analysis
 **/MultiQC/
