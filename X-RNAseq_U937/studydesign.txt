@@ -1,9 +1,0 @@
-sample     	sra_accession 	group
-U_CTRL_1 	GSM2871538    	control
-U_CTRL_2 	GSM2871539    	control
-U_CTRL_3 	GSM2871540    	control
-U_CTRL_4 	GSM2871541    	control
-D_CTRL_1   	GSM2871546    	differentiated
-D_CTRL_2   	GSM2871547    	differentiated
-D_CTRL_3   	GSM2871548    	differentiated
-D_CTRL_4   	GSM2871549    	differentiated

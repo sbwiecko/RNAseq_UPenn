@@ -7,6 +7,7 @@
 *.h5
 *.tsv
 *.gz
+*.zip
 *.json
 *.gmt
 *.fa
@@ -14,6 +15,12 @@
 *.fastq
 **/schistosoma/ # ignore directory in any depth
 *.gtf
+*.mtx
+*.bus
+*.ec
+*whitelist.txt
+*cells_x_genes*
+*.fq
 
 # ignore the results from MultiQC analysis
 **/MultiQC/

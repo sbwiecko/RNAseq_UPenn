@@ -50,3 +50,17 @@ kallisto quant `
 SRR8668755_1M_subsample.fastq `
 *> test.log
 ```
+
+## FASTQC
+
+Download the program as described on the [Babraham Bioinformatics website](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and run the `run_fastqc.bat` file which starts the GUI.
+Load the fastq file to analyze, and save the report as HTML.
+
+## FASTP
+
+The program runs only on WSL. Follow the instructions from the [fastp GitHub page](https://github.com/OpenGene/fastp).
+Run the following command from the directory that contains the fastq files to analyze:
+
+```bash
+~/fastp -i SRR8668774.fastq.gz -o out.fq
+```
