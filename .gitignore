@@ -29,7 +29,7 @@
 **/test/
 
 # ignore the results from ClusterObject
-**/Results_21_May_20
+**/Results_*
 
 # ignore residuals from analysis
 *.js
@@ -44,9 +44,11 @@
 
 # ignore plotly examples
 **/example_plotly/
-.Rproj.user
-.Rhistory
-.RData
+*.Rproj.user
+*.Rhistory
+*.RData*
+# include RDataTmp
+
 
 # ignore Rmd files
 **/Rmarkdown_essentials_files/

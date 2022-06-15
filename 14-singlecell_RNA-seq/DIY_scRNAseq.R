@@ -164,7 +164,6 @@ pbmc.1k.seurat <- CreateSeuratObject(
   NormalizeData(verbose = TRUE) %>%
   FindVariableFeatures(verbose = TRUE)
 
-
 # Let's calculate percent of mitochondrial reads
 # NOTE: change 'MT' to 'mt' for mouse
 pbmc.1k.seurat[["percent.mt"]] <- PercentageFeatureSet(object = pbmc.1k.seurat, pattern = "^MT-") 
@@ -306,8 +305,8 @@ library(scater)   #quality control and visualization for scRNA-seq data
 library(scran)    #for low level processing of scRNA-seq data
 library(tensorflow)
 # need to install tensorflow R package first (above)
-# ALSO install tensorflow, tensorflow-gpu and tensorflow-probability in your python local environment
-# then run tensorflow::install_tensorflow(extra_packages='tensorflow-probability'),
+# ALSO install tensorflow, tensorflow-gpu and tensorflow-probability in your python local
+# environment, then run tensorflow::install_tensorflow(extra_packages='tensorflow-probability'),
 # it will search for a Python installation and prepare an environment,
 # then install cellassign from github: https://github.com/irrationone/cellassign
 
@@ -346,10 +345,10 @@ rowData(pbmc.1k.sce)$Symbol <- rownames(pbmc.1k.sce)
 # Create a list of markers
 # you can find cell specific markers here: http://biocc.hrbmu.edu.cn/CellMarker/
 pbmc_marker_list <- list(
-  Monocytes = c("CD14", "CD68"),
-  `T cells` = c("CD2", "CD3D", "TRAC", "IL32", "CD3E", "PTPRC"),
-  `NK cells` = c("GZMK", "KLRF1", "CCL3", "CMC1", "NKG7", "PTPRC"),
-  `Plasma cells` = c("CD27", "IGHG1", "CD79A", "IGHG2", "PTPRC", "IGKC"),
+  Monocytes =        c("CD14", "CD68"),
+  `T cells` =        c("CD2", "CD3D", "TRAC", "IL32", "CD3E", "PTPRC"),
+  `NK cells` =       c("GZMK", "KLRF1", "CCL3", "CMC1", "NKG7", "PTPRC"),
+  `Plasma cells` =   c("CD27", "IGHG1", "CD79A", "IGHG2", "PTPRC", "IGKC"),
   `Mature B cells` = c("MS4A1", "LTB", "CD52", "IGHD", "CD79A", "PTPRC", "IGKC")
 )
 
@@ -424,35 +423,55 @@ plotUMAP(pbmc.1k.sce, colour_by = "SingleR.labels")
 
 
 # Integrate multiple scRNA-seq datasets ----
-# To demonstrate integration, we'll leave behind the PBMC dataset we worked with above
-# We'll read in two Seurat objects - one generated from the spleen of a untreated mouse (control), and the second from the spleen of mouse infected with Toxoplasma gondii
+# to demonstrate integration, we'll leave behind the PBMC dataset we worked with above, 
+# and read in two Seurat objects - one generated from the spleen of a untreated mouse
+# (control), and the second from the spleen of mouse infected with Toxoplasma gondii
 load("spleen.naive.seurat")
+# remember that we could look eother at UMAP and PCA
 DimPlot(spleen.naive.seurat, reduction = "umap", split.by = "orig.ident", label = TRUE)
 
 load("spleen.toxoInfected.seurat")
 DimPlot(spleen.toxoInfected.seurat, reduction = "umap", split.by = "orig.ident", label = TRUE)
 
 # since we are now going to work with multiple samples, we need a study design file with our sample metadata
-targets <- read_tsv("studyDesign.txt")
+targets <- read_tsv("./studyDesign.txt")
 
 # extract variables of interest
 sampleID <- targets$sampleID
 treatment <- targets$treatment
 
-# annotate your seurat objects with as much or as little metadata as you want!
+# annotate your seurat objects with as much or as little metadata as you want
 spleen.naive.seurat$treatment <- treatment[1]
 spleen.toxoInfected.seurat$treatment <- treatment[2]
 
 # take a look at where this metadata lives in the seurat object
-spleen.toxoInfected.seurat@meta.data$treatment
+head(spleen.toxoInfected.seurat@meta.data$treatment, 15)
 
 # select features that are repeatedly variable across datasets for integration
-spleen_features <- SelectIntegrationFeatures(object.list = c(spleen.naive.seurat, spleen.toxoInfected.seurat))
-spleen_anchors <- FindIntegrationAnchors(object.list = c(spleen.naive.seurat, spleen.toxoInfected.seurat), anchor.features = spleen_features)
+# i.e., all the genes expressed in both conditions
+spleen_features <- SelectIntegrationFeatures(
+  object.list = c(
+    spleen.naive.seurat,
+    spleen.toxoInfected.seurat
+  )
+)
+
+# Through the identification of cell pairwise correspondences between single cells
+# across datasets, termed "anchors", we can transform datasets into a shared space,
+# even in the presence of extensive technical and/or biological differences.
+spleen_anchors <- FindIntegrationAnchors(
+  object.list = c(
+    spleen.naive.seurat,
+    spleen.toxoInfected.seurat
+  ),
+  anchor.features = spleen_features
+)
+
 spleen_integrated <- IntegrateData(anchorset = spleen_anchors)
-# NOTE: if you look at your seurat object, the default assay as changed from 'RNA' to 'integrated'
-# this can be change anytime using the line below
-# this would be the same way you would change between scRNA-seq and scATAC-seq
+print(spleen_integrated)
+# NOTE: if you look at your seurat object, the default assay as changed from 'RNA'
+# to 'integrated', this can be change anytime using the line below, e.g.,
+# change between scRNA-seq and scATAC-seq
 # DefaultAssay(spleen_integrated) <- "RNA"
 
 # Run the standard workflow for visualization and clustering
@@ -461,92 +480,149 @@ spleen_integrated <- RunPCA(spleen_integrated, npcs = 30, verbose = FALSE)
 spleen_integrated <- RunUMAP(spleen_integrated, reduction = "pca", dims = 1:30)
 spleen_integrated <- FindNeighbors(spleen_integrated, reduction = "pca", dims = 1:30)
 spleen_integrated <- FindClusters(spleen_integrated, resolution = 0.5)
+
 DimPlot(spleen_integrated, reduction = "umap", label = TRUE)
 
 # let's see what proportion of our total cells reside in each cluster
 prop.table(table(Idents(spleen_integrated)))
 
-# remember, we have metadata in this integrated seurat object, so you can use this to split your UMAP
-DimPlot(spleen_integrated, reduction = "umap", 
-        split.by = "treatment", # this facets the plot 
-        group.by = "seurat_clusters", # labels the cells with values from your group.by variable
-        label = TRUE)
+# remember, we have metadata in this integrated seurat object,
+# so you can use this to split your UMAP
+DimPlot(
+  spleen_integrated, reduction = "umap",
+  split.by = "treatment",       # this facets the plot
+  group.by = "seurat_clusters", # labels the cells with values from the group.by variable
+  label = TRUE
+)
 
 # plot genes of interest on UMAP
-FeaturePlot(spleen_integrated, 
-            reduction = "umap", 
-            features = 'Sdc1',
-            pt.size = 0.4, 
-            order = TRUE,
-            split.by = "treatment",
-            min.cutoff = 'q10',
-            label = FALSE)
+FeaturePlot(
+  spleen_integrated,
+  reduction = "umap",
+  features = 'Sdc1', # e.g., a marker of plasma cells
+  pt.size = 0.4,
+  order = TRUE,
+  split.by = "treatment",
+  min.cutoff = 'q10',
+  label = FALSE
+)
 
 # we can plot more than one gene here
 my_fav_genes <- c("Cd4", "Cd8a")
-FeaturePlot(spleen_integrated, 
-            reduction = "umap", 
-            features = my_fav_genes,
-            pt.size = 0.4, 
-            order = TRUE,
-            split.by = "treatment",
-            min.cutoff = 'q10',
-            label = FALSE)
+FeaturePlot(
+  spleen_integrated,
+  reduction = "umap",
+  features = my_fav_genes,
+  pt.size = 0.4,
+  order = TRUE,
+  split.by = "treatment",
+  min.cutoff = 'q10',
+  label = FALSE
+)
+
+
 
 # Leveraging cluster identity in your analysis ----
-# now let's rerun our cluster identification using SingleR
+# now let's rerun our cluster identification using SingleR and mouse RNA-Seq reference
+# dataset as prepared in line 397
 spleen_integrated.sce <- as.SingleCellExperiment(spleen_integrated)
-predictions <- SingleR(test=spleen_integrated.sce, assay.type.test=1, 
-                       ref=MouseRNAseq.data, labels=MouseRNAseq.data$label.main)
+predictions <- SingleR(
+  test = spleen_integrated.sce,
+  assay.type.test = 1,
+  ref = MouseRNAseq.data,
+  labels = MouseRNAseq.data$label.main
+)
 
 #now add back to singleCellExperiment object (or Seurat objects)
 spleen_integrated.sce[["SingleR.labels"]] <- predictions$labels
-plotUMAP(spleen_integrated.sce, colour_by = "SingleR.labels")
+plotUMAP(
+  spleen_integrated.sce,
+  colour_by = "SingleR.labels"
+)
 
 spleen_integrated2 <- as.Seurat(spleen_integrated.sce, counts = NULL)
-DimPlot(spleen_integrated2, reduction = "UMAP", 
-        split.by = "treatment", # this facets the plot 
-        group.by = "SingleR.labels", # labels the cells with values from your group.by variable
-        label = TRUE)
+DimPlot(
+  spleen_integrated2, reduction = "UMAP",
+  split.by = "treatment",      # this facets the plot
+  group.by = "SingleR.labels", # labels the cells with values from your group.by variable
+  label = TRUE
+)
 
 # If we repeat the steps above for different cell type markers, we get a sense for the following cluster IDs
-new.cluster.ids <- c("B cells", "RBCs", "CD8+ T cells", "B cells", "RBCs", "CD4+ T cells", "CD4+ T cells", "Monocytes/Macrophages", "Granulocytes", "Monocytes/Macrophages", "B cells", "Plasma cells", "Monocytes/Macrophages", "Monocytes/Macrophages", "Granulocytes", "CD8+ T cells", "CD8+ T cells", "17", "18", "19", "20") 
+new.cluster.ids <- c(
+  "B cells",
+  "RBCs",
+  "CD8+ T cells",
+  "B cells", # can be duplicated
+  "RBCs",
+  "CD4+ T cells",
+  "CD4+ T cells",
+  "Monocytes/Macrophages",
+  "Granulocytes",
+  "Monocytes/Macrophages",
+  "B cells",
+  "Plasma cells",
+  "Monocytes/Macrophages",
+  "Monocytes/Macrophages",
+  "Granulocytes",
+  "CD8+ T cells",
+  "CD8+ T cells",
+  "17",
+  "18",
+  "19",
+  "20"
+)
 names(new.cluster.ids) <- levels(spleen_integrated)
 spleen_integrated <- RenameIdents(spleen_integrated, new.cluster.ids)
-DimPlot(spleen_integrated, reduction = "umap", 
-        split.by = "treatment", # this facets the plot 
-        label = TRUE)
+DimPlot(
+  spleen_integrated,
+  reduction = "umap",
+  split.by = "treatment",
+  label = TRUE
+)
 
 # take a look at what you've done
-Idents(spleen_integrated)
+head(Idents(spleen_integrated))
+
+
 
 # subset seurat object to focus on single cluster ----
 # let's get just the CD4 T cells
 spleen_integrated.CD4.Tcells <- subset(spleen_integrated, idents = "CD4+ T cells")
+
 # you could re-cluster if you want...depends on what you're trying to accomplish
 #spleen_integrated.CD4.Tcells <- FindNeighbors(spleen_integrated.CD4.Tcells, dims = 1:10, k.param = 5)
 #spleen_integrated.CD4.Tcells <- FindClusters(spleen_integrated.CD4.Tcells)
-DimPlot(spleen_integrated.CD4.Tcells, reduction = "umap", label = TRUE)
-Idents(spleen_integrated.CD4.Tcells)
 
-# now we need to switch out 'Idents' to be treatment, rather than cluster
+DimPlot(spleen_integrated.CD4.Tcells, reduction = "umap", label = TRUE)
+head(Idents(spleen_integrated.CD4.Tcells), 20)
+
+# now we need to switch out 'Idents' to be treatment, rather than cluster,
+# which here is the same for all cells, i.e., "CD4+ T cells"
 Idents(spleen_integrated.CD4.Tcells) <- spleen_integrated.CD4.Tcells$treatment
-inf.vs.naive.markers <- FindMarkers(object = spleen_integrated.CD4.Tcells, 
-                                    ident.1 = "infected", 
-                                    ident.2 = "naive", 
-                                    min.pct = 0)
+inf.vs.naive.markers <- FindMarkers(
+  object = spleen_integrated.CD4.Tcells,
+  ident.1 = "infected",
+  ident.2 = "naive",
+  min.pct = 0
+)
 
 inf.vs.naive.markers$pct.diff <- inf.vs.naive.markers$pct.1 - inf.vs.naive.markers$pct.2
 inf.vs.naive.markers.df <- as_tibble(inf.vs.naive.markers, rownames = "geneID")
+
 # Export DEGs for each cluster (ranked by avg_logFC > 0.5)
 myTopHits <- inf.vs.naive.markers.df %>% arrange(desc(avg_log2FC))
 
-FeaturePlot(spleen_integrated.CD4.Tcells, 
-            reduction = "umap", 
-            features = "Ccl5",
-            pt.size = 0.4, 
-            order = TRUE,
-            split.by = "treatment",
-            min.cutoff = 'q10',
-            label = FALSE)
+FeaturePlot(
+  spleen_integrated.CD4.Tcells,
+  reduction = "umap",
+  features = "Ccl5",
+  pt.size = 0.4,
+  order = TRUE,
+  split.by = "treatment",
+  min.cutoff = 'q10',
+  label = FALSE
+)
 
+# all the steps after filtering of DEGs learnt in bulk RNA-Seq analysis, e.g.,
+# ploting and GO/GSEA, can be performed on this subset of data.
