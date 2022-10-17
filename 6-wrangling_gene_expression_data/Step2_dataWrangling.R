@@ -105,6 +105,22 @@ cpm <- cpm(myDGEList)
 colSums(cpm)
 log2.cpm <- cpm(myDGEList, log=TRUE)
 
+# Because there are many normalized read values of 0, our data are skewed and 
+# do not conform to a normal distribution (see the given histogram of the 
+# normalized gene expression values). This means we violate an assumption of 
+# the parametric tests that we will use later on in analysis.
+#
+# We will make all of our normalized reads positive and non-zero by first 
+# adding 1 to the values, and then we will take the natural log to reduce 
+# the skew. Many biological phenomena are log-normal, meaning that after 
+# a log transformation the data are normally distributed. Although we do not 
+# recover a completely normal distribution, the skew is reduced (see the 
+# given histogram of the log transformed, normalized gene expression values).
+#
+# Log transformations also have the benefit of representing log-fold changes, 
+# which are the standard way to measure changes in gene expression.
+
+
 # 'coerce' your data matrix to a dataframe so that you can use tidyverse tools on it
 log2.cpm.df <- as_tibble(log2.cpm, rownames = "geneID")
 log2.cpm.df
