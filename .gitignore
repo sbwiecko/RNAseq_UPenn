@@ -22,6 +22,9 @@
 *cells_x_genes*
 *.fq
 *.seurat
+*.png
+*t2g.txt
+*transcripts.txt
 
 # ignore the results from MultiQC analysis
 **/MultiQC/
@@ -41,6 +44,7 @@
 *.RData
 *.Rhistory
 *.log
+
 
 # ignore plotly examples
 **/example_plotly/
